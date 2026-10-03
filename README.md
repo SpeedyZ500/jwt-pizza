@@ -1,4 +1,4 @@
-# 🍕 JWT Pizza
+# 🍕 jwt-pizza
 
 [![Coverage badge](https://pizza-factory.cs329.click/api/badge/swz22/jwtpizzacoverage)](https://pizza-factory.cs329.click/api/badge/swz22/jwtpizzacoverage)
 
