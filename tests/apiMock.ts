@@ -22,12 +22,13 @@ export interface ApiRequest {
 
 /** A fresh in-memory backend for each test. Only intercepted requests reach this state. */
 export class ApiMock {
-  private accounts: User[] = structuredClone(Object.values(users));
+  accounts: User[] = structuredClone(Object.values(users));
   private nextUserId = 9;
   user: User | null = null;
   sessionExpired = false;
   registrationError = false;
   paymentError = false;
+  deletionError = false;
   verificationError = false;
   verificationNetworkError = false;
   requests: ApiRequest[] = [];
@@ -94,6 +95,26 @@ export class ApiMock {
       if (path === '/api/user/me' && method === 'GET') {
         return this.sessionExpired || !this.user ? error('Session expired', 401) : reply(this.user);
       }
+      if (path === '/api/user' && method === 'GET') {
+        if (this.sessionExpired || !this.user || request.headers()['authorization'] !== 'Bearer test-token') return error('Unauthorized', 401);
+        if (!Role.isRole(this.user, Role.Admin)) return error('Forbidden', 403);
+        const pattern = url.searchParams.get('name') || '*';
+        const escaped = pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+        const filtered = this.accounts.filter((account) => new RegExp(`^${escaped}$`, 'i').test(account.name || ''));
+        const limit = Number(url.searchParams.get('limit') || 10);
+        const start = Number(url.searchParams.get('page') || 0) * limit;
+        return reply({ users: filtered.slice(start, start + limit).map(({ password, ...user }) => user), more: start + limit < filtered.length });
+      }
+      const userDelete = path.match(/^\/api\/user\/([^/]+)$/);
+      if (userDelete && method === 'DELETE') {
+        if (this.sessionExpired || !this.user || request.headers()['authorization'] !== 'Bearer test-token') return error('Unauthorized', 401);
+        if (!Role.isRole(this.user, Role.Admin)) return error('Forbidden', 403);
+        if (this.deletionError) return error('Unable to delete user', 500);
+        if (!this.accounts.some((account) => account.id === userDelete[1])) return error('User not found', 404);
+        this.accounts = this.accounts.filter((account) => account.id !== userDelete[1]);
+        if (this.user.id === userDelete[1]) this.user = null;
+        return reply({});
+      }
       const userUpdate = path.match(/^\/api\/user\/([^/]+)$/);
       if (userUpdate && method === 'PUT') {
         if (this.sessionExpired || !this.user) return error('Session expired', 401);
@@ -152,6 +173,34 @@ export class ApiMock {
   }
 
   private docs(source: string) {
-    return { endpoints: [{ requiresAuth: true, method: 'POST', path: '/api/order', description: `${source} order endpoint`, example: 'Example pizza request', response: { accepted: true } }] };
+    const endpoints = [{
+      requiresAuth: true,
+      method: 'POST',
+      path: '/api/order',
+      description: `${source} order endpoint`,
+      example: 'Example pizza request',
+      response: { accepted: true },
+    }];
+    if (source === 'service') {
+      return { endpoints: [...endpoints, {
+        method: 'GET',
+        path: '/api/user?page=0&limit=10&name=*',
+        requiresAuth: true,
+        description: 'Gets a list of users (admin only). Defaults: page=0, limit=10, name=*. Use * as a name wildcard.',
+        example: `curl -X GET localhost:3000/api/user -H 'Authorization: Bearer tttttt'`,
+        response: {
+          users: [{ id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] }],
+          more: false,
+        },
+      }, {
+        method: 'DELETE',
+        path: '/api/user/:userId',
+        requiresAuth: true,
+        description: 'Deletes a user and their authentication and roles (admin only)',
+        example: `curl -X DELETE localhost:3000/api/user/3 -H 'Authorization: Bearer tttttt'`,
+        response: {},
+      }] };
+    }
+    return { endpoints };
   }
 }

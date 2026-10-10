@@ -13,7 +13,7 @@ for (const source of ['service', 'factory']) {
     await expect(page.getByRole('heading', { name: 'JWT Pizza API', exact: true })).toBeVisible();
     await expect(page.getByRole('main')).toContainText(`${source} order endpoint`);
     await expect(page.getByRole('main')).toContainText('Example pizza request');
-    await expect(page.locator('pre')).toContainText('"accepted": true');
+    await expect(page.locator('pre').filter({ hasText: '"accepted"' })).toContainText('"accepted": true');
     expect(api.matching('GET', '/api/docs')).toHaveLength(1);
   });
 }
