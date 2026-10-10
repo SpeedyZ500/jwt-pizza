@@ -22,6 +22,8 @@ export interface ApiRequest {
 
 /** A fresh in-memory backend for each test. Only intercepted requests reach this state. */
 export class ApiMock {
+  private accounts: User[] = structuredClone(Object.values(users));
+  private nextUserId = 9;
   user: User | null = null;
   sessionExpired = false;
   registrationError = false;
@@ -75,20 +77,35 @@ export class ApiMock {
       }
       if (path === '/api/auth') {
         if (method === 'PUT') {
-          const user = Object.values(users).find((user) => user.email === body.email && user.password === body.password);
+          const user = this.accounts.find((user) => user.email === body.email && user.password === body.password);
           if (!user) return error('Unauthorized', 401);
           this.user = structuredClone(user);
           return reply({ user: this.user, token: 'test-token' });
         }
         if (method === 'POST') {
           if (this.registrationError) return error('Email already registered', 409);
-          this.user = { id: '9', name: body.name, email: body.email, roles: [{ role: Role.Diner }] };
+          this.accounts.push({ id: String(this.nextUserId++), name: body.name, email: body.email, password: body.password, roles: [{ role: Role.Diner }] });
+          const { password, ...registeredUser } = this.accounts[this.accounts.length - 1];
+          this.user = structuredClone(registeredUser);
           return reply({ user: this.user, token: 'test-token' });
         }
         if (method === 'DELETE') { this.user = null; return reply({}); }
       }
       if (path === '/api/user/me' && method === 'GET') {
         return this.sessionExpired || !this.user ? error('Session expired', 401) : reply(this.user);
+      }
+      const userUpdate = path.match(/^\/api\/user\/([^/]+)$/);
+      if (userUpdate && method === 'PUT') {
+        if (this.sessionExpired || !this.user) return error('Session expired', 401);
+        const account = this.accounts.find((user) => user.id === userUpdate[1]);
+        if (!account) return error('User not found', 404);
+        account.name = body.name;
+        account.email = body.email;
+        account.roles = structuredClone(body.roles);
+        if (body.password !== undefined) account.password = body.password;
+        const updatedUser = { id: account.id, name: account.name, email: account.email, roles: structuredClone(account.roles) };
+        this.user = structuredClone(updatedUser);
+        return reply({ user: updatedUser, token: 'test-token' });
       }
       if (path === '/api/order/menu' && method === 'GET') return reply(menu);
       if (path === '/api/order') {
