@@ -1,5 +1,25 @@
 import type { BrowserContext, Page } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+import { loadEnv } from 'vite';
 import { Role, type User, type Menu, type Franchise, type Order } from '../src/service/pizzaService';
+
+const env = loadEnv('development', fileURLToPath(new URL('..', import.meta.url)), 'VITE_PIZZA_');
+
+function apiOrigin(name: string) {
+  const value = env[name];
+  const url = value ? URL.parse(value) : null;
+  if (!url || !['http:', 'https:'].includes(url.protocol) || value !== url.origin) {
+    throw new Error(`${name} must be set to an HTTP(S) origin without a trailing slash`);
+  }
+  return url.origin;
+}
+
+export const pizzaServiceUrl = apiOrigin('VITE_PIZZA_SERVICE_URL');
+export const pizzaFactoryUrl = apiOrigin('VITE_PIZZA_FACTORY_URL');
+
+if (pizzaServiceUrl === pizzaFactoryUrl) {
+  throw new Error('VITE_PIZZA_SERVICE_URL and VITE_PIZZA_FACTORY_URL must use distinct origins');
+}
 
 export const users = {
   diner: { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] },
@@ -54,8 +74,8 @@ export class ApiMock {
       const request = route.request();
       const url = new URL(request.url());
       // Exact origins keep an accidentally changed backend from being silently mocked.
-      const service = url.origin === 'http://localhost:3000';
-      const factory = url.origin === 'https://pizza-factory.cs329.click';
+      const service = url.origin === pizzaServiceUrl;
+      const factory = url.origin === pizzaFactoryUrl;
       if (!(service || factory) || !url.pathname.startsWith('/api/')) {
         await route.fallback();
         return;
@@ -187,7 +207,7 @@ export class ApiMock {
         path: '/api/user?page=0&limit=10&name=*',
         requiresAuth: true,
         description: 'Gets a list of users (admin only). Defaults: page=0, limit=10, name=*. Use * as a name wildcard.',
-        example: `curl -X GET localhost:3000/api/user -H 'Authorization: Bearer tttttt'`,
+        example: `curl -X GET ${pizzaServiceUrl}/api/user -H 'Authorization: Bearer tttttt'`,
         response: {
           users: [{ id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] }],
           more: false,
@@ -197,7 +217,7 @@ export class ApiMock {
         path: '/api/user/:userId',
         requiresAuth: true,
         description: 'Deletes a user and their authentication and roles (admin only)',
-        example: `curl -X DELETE localhost:3000/api/user/3 -H 'Authorization: Bearer tttttt'`,
+        example: `curl -X DELETE ${pizzaServiceUrl}/api/user/3 -H 'Authorization: Bearer tttttt'`,
         response: {},
       }] };
     }

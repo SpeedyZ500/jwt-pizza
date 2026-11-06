@@ -1,4 +1,5 @@
 import { test, expect, installRequestGuard } from './testSetup';
+import { pizzaFactoryUrl, pizzaServiceUrl } from './apiMock';
 
 test('the request guard aborts unmocked service, factory and same-origin API calls', async ({ browser, baseURL }) => {
   // An isolated context lets this test examine expected violations without
@@ -9,8 +10,8 @@ test('the request guard aborts unmocked service, factory and same-origin API cal
     const page = await context.newPage();
     await page.goto(baseURL!);
     const targets = [
-      'http://localhost:3000/api/unmocked',
-      'https://pizza-factory.cs329.click/api/unmocked',
+      `${pizzaServiceUrl}/api/unmocked`,
+      `${pizzaFactoryUrl}/api/unmocked`,
       `${baseURL}/api/unmocked`,
       'https://unexpected-backend.example/api/unmocked',
     ];
@@ -29,13 +30,13 @@ test('the request guard aborts unmocked service, factory and same-origin API cal
 
 test('user mocks enforce admin authentication and omit passwords', async ({ page, api }) => {
   await page.goto('/');
-  const request = (path: string, method = 'GET', authorized = true) => page.evaluate(async ({ path, method, authorized }) => {
-    const response = await fetch(`http://localhost:3000${path}`, {
+  const request = (path: string, method = 'GET', authorized = true) => page.evaluate(async ({ url, method, authorized }) => {
+    const response = await fetch(url, {
       method,
       headers: authorized ? { Authorization: 'Bearer test-token' } : {},
     });
     return { status: response.status, body: await response.json() };
-  }, { path, method, authorized });
+  }, { url: `${pizzaServiceUrl}${path}`, method, authorized });
   expect((await request('/api/user')).status).toBe(401);
   expect((await request('/api/user/3', 'DELETE')).status).toBe(401);
   api.user = structuredClone(api.accounts.find((account) => account.id === '3')!);
@@ -55,13 +56,13 @@ test('user mocks enforce admin authentication and omit passwords', async ({ page
   expect((await request('/api/user')).body.users).toHaveLength(2);
   expect(api.accounts.some((account) => account.id === '3')).toBe(false);
   expect((await request('/api/user/3', 'DELETE')).status).toBe(404);
-  const loginStatus = await page.evaluate(async () => {
-    const response = await fetch('http://localhost:3000/api/auth', {
+  const loginStatus = await page.evaluate(async (url) => {
+    const response = await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'd@jwt.com', password: 'a' }),
     });
     return response.status;
-  });
+  }, `${pizzaServiceUrl}/api/auth`);
   expect(loginStatus).toBe(401);
 });

@@ -12,6 +12,11 @@ known service and factory requests are fulfilled in the browser context, while
 unknown API or external requests are aborted and fail the test at teardown.
 External images receive a local placeholder. Service workers are disabled so
 requests cannot bypass interception. The local Vite server serves frontend files.
+Playwright starts its own Vite server and requires port 5173 to be free.
+The app and mocks load the Vite development settings. Set
+`VITE_PIZZA_SERVICE_URL` and `VITE_PIZZA_FACTORY_URL` in the environment to
+override the defaults in `.env.development`. Use distinct HTTP(S) origins
+without trailing slashes.
 
 `apiMock.ts` provides typed diner, admin and franchisee accounts, pizzas,
 franchises, stores, and orders. Mock mutations change only the current test's
